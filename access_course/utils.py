@@ -21,6 +21,7 @@ from django.utils.crypto import get_random_string
 from django.conf import settings
 import unicodedata
 from .models import userdetails
+import uuid
 
 progress= {"NOT_STARTED": "Not Started",
            "STARTED": "Started",
@@ -59,6 +60,71 @@ def _validate_url(url):
         return {"status":True,"error":''}
     except ValidationError, e:
         return {"status": False,"error":e}
+def validate_uuid(uuid_string):
+    try:
+        val = uuid.UUID(uuid_string, version=4)
+        return True
+    except ValueError:
+        # If it's a value error, then the string 
+        # is not a valid hex code for a UUID.
+        return False
+        
+def send_ab_progress(data_dict):
+
+    if data_dict['uuid']  is None or data_dict['uuid'] =="":
+        return "Unique Identifier is mandatory value to send progress.Cannot Send data"
+    
+    if validate_uuid(data_dict['uuid']) == False:
+        return "Unique Identifier is not valid UUID. Cannot send data."
+
+    if data_dict['block_id'] is None or data_dict['block_id'] == '':
+        return "Block Id is mandatory value to send progress.Cannot Send data"
+    
+    if data_dict['course_id'] is None or data_dict['course_id'] == "":
+        return "Course Id is mandatory value to send progress.Cannot Send data"
+
+    if data_dict['assessment_type'] is None or data_dict['assessment_type'] == "":
+        return "Assessment Type is mandatory value to send progress.Cannot Send data"
+
+    if data_dict['total_problems'] is None or not isinstance(data_dict['total_problems'] ,int):
+        return "Total Problems is mandatory integer field.Cannot send data"
+
+    if data_dict['correct'] is None or not isinstance(data_dict['correct'] ,int):
+        return "Correct is mandatory integer field.Cannot send data"
+
+    if data_dict['incorrect'] is None or not isinstance(data_dict['incorrect'] ,int):
+        return "InCorrect is mandatory integer field.Cannot send data"
+
+    if data_dict['first_attempt'] is None or not isinstance(data_dict['first_attempt'] ,bool):
+        return "First Attempt is mandatory Boolean field.Cannot send data"
+
+    if  data_dict['incorrect'] + data_dict['correct']  > data_dict['total_problems']:
+        return "The sum of incorrect and correct cannot be greater than total_problems.Cannot Send Data"
+    api_course_progress = settings.BOP_CONFIGURATION.get("API_COURSE_PROGRESS", "")
+    system_token = settings.BOP_CONFIGURATION.get("SYSTEM_TOKEN", "")
+        
+    if api_course_progress != "" and system_token!='' :
+        input_data= {
+        "user_id": data_dict['uuid'],
+        "id": data_dict['url_name'],
+        "block_id": data_dict['block_id'] ,
+        "course_id": data_dict['course_id'],
+        "block_name": data_dict['block_name'],
+        "block_type": data_dict['assessment_type'],
+        "total_problems": data_dict['total_problems'],
+        "correct_problems": data_dict['correct'],
+        "incorrect_problems": data_dict['incorrect'],
+        "is_first_attempt": data_dict['first_attempt'],
+        "status": data_dict['status'],
+        "start_date": data_dict['start_date'],
+        "end_date": data_dict['end_date']
+        } 
+        header={"Api-Token": system_token}
+        result = _get_data_from_url(api_course_progress,header,input_data)
+        print result
+    else:
+        return "The Course Progress API or/and System Token is not set. Cannot Send Data."
+    return result    
 
 def send_training_progress(student,course,blk,complete,total_problems,correct,incorrect,first_attempt,start_date,end_date,assessment_type):
 
